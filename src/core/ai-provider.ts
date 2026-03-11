@@ -41,7 +41,7 @@ export interface AskOptions {
    * AI provider to use for this call, overriding the global ai-provider.json config.
    * Falls back to global config if not specified.
    */
-  provider?: 'claude-code' | 'vercel-ai-sdk'
+  provider?: 'claude-code' | 'vercel-ai-sdk' | 'agent-sdk'
   /**
    * Vercel AI SDK model override — per-request provider/model/baseUrl/apiKey.
    * Only used when the active backend is 'vercel-ai-sdk'.
@@ -51,6 +51,15 @@ export interface AskOptions {
     model: string
     baseUrl?: string
     apiKey?: string
+  }
+  /**
+   * Agent SDK model override — per-request model/apiKey/baseUrl.
+   * Only used when the active backend is 'agent-sdk'.
+   */
+  agentSdk?: {
+    model?: string
+    apiKey?: string
+    baseUrl?: string
   }
 }
 
@@ -74,10 +83,14 @@ export class ProviderRouter implements AIProvider {
   constructor(
     private vercel: AIProvider,
     private claudeCode: AIProvider | null,
+    private agentSdk: AIProvider | null = null,
   ) {}
 
   async ask(prompt: string): Promise<ProviderResult> {
     const config = await readAIProviderConfig()
+    if (config.backend === 'agent-sdk' && this.agentSdk) {
+      return this.agentSdk.ask(prompt)
+    }
     if (config.backend === 'claude-code' && this.claudeCode) {
       return this.claudeCode.ask(prompt)
     }
@@ -86,6 +99,9 @@ export class ProviderRouter implements AIProvider {
 
   async askWithSession(prompt: string, session: SessionStore, opts?: AskOptions): Promise<ProviderResult> {
     // Per-request provider override takes precedence over global config
+    if (opts?.provider === 'agent-sdk' && this.agentSdk) {
+      return this.agentSdk.askWithSession(prompt, session, opts)
+    }
     if (opts?.provider === 'claude-code' && this.claudeCode) {
       return this.claudeCode.askWithSession(prompt, session, opts)
     }
@@ -94,6 +110,9 @@ export class ProviderRouter implements AIProvider {
     }
     // Fall back to global config
     const config = await readAIProviderConfig()
+    if (config.backend === 'agent-sdk' && this.agentSdk) {
+      return this.agentSdk.askWithSession(prompt, session, opts)
+    }
     if (config.backend === 'claude-code' && this.claudeCode) {
       return this.claudeCode.askWithSession(prompt, session, opts)
     }

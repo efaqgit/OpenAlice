@@ -14,7 +14,7 @@ const engineSchema = z.object({
 })
 
 export const aiProviderSchema = z.object({
-  backend: z.enum(['claude-code', 'vercel-ai-sdk']).default('claude-code'),
+  backend: z.enum(['claude-code', 'vercel-ai-sdk', 'agent-sdk']).default('claude-code'),
   provider: z.string().default('anthropic'),
   model: z.string().default('claude-sonnet-4-6'),
   baseUrl: z.string().min(1).optional(),
@@ -180,16 +180,25 @@ export const vercelAiSdkOverrideSchema = z.object({
   apiKey: z.string().optional(),
 })
 
+/** Agent SDK model override — per-channel model/key/endpoint. */
+export const agentSdkOverrideSchema = z.object({
+  model: z.string().optional(),
+  apiKey: z.string().optional(),
+  baseUrl: z.string().optional(),
+})
+
 export const webSubchannelSchema = z.object({
   /** URL-safe identifier. Used as session path segment: data/sessions/web/{id}.jsonl */
   id: z.string().regex(/^[a-z0-9-_]+$/, 'id must be lowercase alphanumeric with hyphens/underscores'),
   label: z.string().min(1),
   /** System prompt override for this channel. */
   systemPrompt: z.string().optional(),
-  /** AI backend override ('claude-code' | 'vercel-ai-sdk'). Falls back to global config if omitted. */
-  provider: z.enum(['claude-code', 'vercel-ai-sdk']).optional(),
+  /** AI backend override. Falls back to global config if omitted. */
+  provider: z.enum(['claude-code', 'vercel-ai-sdk', 'agent-sdk']).optional(),
   /** Vercel AI SDK model override. Only used when provider is 'vercel-ai-sdk'. */
   vercelAiSdk: vercelAiSdkOverrideSchema.optional(),
+  /** Agent SDK model override. Only used when provider is 'agent-sdk'. */
+  agentSdk: agentSdkOverrideSchema.optional(),
   /** Tool names to disable in addition to the global disabled list. */
   disabledTools: z.array(z.string()).optional(),
 })

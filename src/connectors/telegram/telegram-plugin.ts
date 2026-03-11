@@ -18,6 +18,7 @@ const MAX_MESSAGE_LENGTH = 4096
 const BACKEND_LABELS: Record<AIBackend, string> = {
   'claude-code': 'Claude Code',
   'vercel-ai-sdk': 'Vercel AI SDK',
+  'agent-sdk': 'Agent SDK',
 }
 
 export class TelegramPlugin implements Plugin {
@@ -111,9 +112,11 @@ export class TelegramPlugin implements Plugin {
           // Edit the original settings message in-place
           const ccLabel = backend === 'claude-code' ? '> Claude Code' : 'Claude Code'
           const aiLabel = backend === 'vercel-ai-sdk' ? '> Vercel AI SDK' : 'Vercel AI SDK'
+          const sdkLabel = backend === 'agent-sdk' ? '> Agent SDK' : 'Agent SDK'
           const keyboard = new InlineKeyboard()
             .text(ccLabel, 'provider:claude-code')
             .text(aiLabel, 'provider:vercel-ai-sdk')
+            .text(sdkLabel, 'provider:agent-sdk')
           await ctx.editMessageText(
             `Current provider: ${BACKEND_LABELS[backend]}\n\nChoose default AI provider:`,
             { reply_markup: keyboard },
@@ -320,10 +323,12 @@ export class TelegramPlugin implements Plugin {
     const aiConfig = await readAIConfig()
     const ccLabel = aiConfig.backend === 'claude-code' ? '> Claude Code' : 'Claude Code'
     const aiLabel = aiConfig.backend === 'vercel-ai-sdk' ? '> Vercel AI SDK' : 'Vercel AI SDK'
+    const sdkLabel = aiConfig.backend === 'agent-sdk' ? '> Agent SDK' : 'Agent SDK'
 
     const keyboard = new InlineKeyboard()
       .text(ccLabel, 'provider:claude-code')
       .text(aiLabel, 'provider:vercel-ai-sdk')
+      .text(sdkLabel, 'provider:agent-sdk')
 
     await this.bot!.api.sendMessage(
       chatId,

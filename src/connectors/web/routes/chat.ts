@@ -45,6 +45,7 @@ export function createChatRoutes({ ctx, sessions, sseByChannel }: ChatDeps) {
         if (channel.disabledTools?.length) opts.disabledTools = channel.disabledTools
         if (channel.provider) opts.provider = channel.provider
         if (channel.vercelAiSdk) opts.vercelAiSdk = channel.vercelAiSdk
+        if (channel.agentSdk) opts.agentSdk = channel.agentSdk
       }
     }
 
