@@ -15,6 +15,7 @@ import type { IBroker } from '../../brokers/types.js'
 import '../../contract-ext.js'
 
 let broker: IBroker | null = null
+let uta: UnifiedTradingAccount | null = null
 let marketOpen = false
 
 beforeAll(async () => {
@@ -22,6 +23,8 @@ beforeAll(async () => {
   const alpaca = filterByProvider(all, 'alpaca')[0]
   if (!alpaca) return
   broker = alpaca.broker
+  uta = new UnifiedTradingAccount(broker)
+  await uta.waitForConnect()
   const clock = await broker.getMarketClock()
   marketOpen = clock.isOpen
   console.log(`UTA Alpaca: market ${marketOpen ? 'OPEN' : 'CLOSED'}`)
@@ -30,15 +33,14 @@ beforeAll(async () => {
 // ==================== Order lifecycle (any time) ====================
 
 describe('UTA — Alpaca order lifecycle', () => {
-  beforeEach(({ skip }) => { if (!broker) skip('no Alpaca paper account') })
+  beforeEach(({ skip }) => { if (!uta) skip('no Alpaca paper account') })
 
   it('limit order: stage → commit → push → cancel', async () => {
-    const uta = new UnifiedTradingAccount(broker!)
     const nativeKey = broker!.getNativeKey({ symbol: 'AAPL' } as any)
-    const aliceId = `${uta.id}|${nativeKey}`
+    const aliceId = `${uta!.id}|${nativeKey}`
 
     // Stage a limit buy at $1 (won't fill)
-    const addResult = uta.stagePlaceOrder({
+    const addResult = uta!.stagePlaceOrder({
       aliceId,
       symbol: 'AAPL',
       side: 'buy',
@@ -49,11 +51,11 @@ describe('UTA — Alpaca order lifecycle', () => {
     })
     expect(addResult.staged).toBe(true)
 
-    const commitResult = uta.commit('e2e: limit buy 1 AAPL @ $1')
+    const commitResult = uta!.commit('e2e: limit buy 1 AAPL @ $1')
     expect(commitResult.prepared).toBe(true)
     console.log(`  committed: hash=${commitResult.hash}`)
 
-    const pushResult = await uta.push()
+    const pushResult = await uta!.push()
     console.log(`  pushed: submitted=${pushResult.submitted.length}, status=${pushResult.submitted[0]?.status}`)
     expect(pushResult.submitted).toHaveLength(1)
     expect(pushResult.rejected).toHaveLength(0)
@@ -62,14 +64,14 @@ describe('UTA — Alpaca order lifecycle', () => {
     const orderId = pushResult.submitted[0].orderId!
 
     // Cancel the order
-    uta.stageCancelOrder({ orderId })
-    uta.commit('e2e: cancel limit order')
-    const cancelPush = await uta.push()
+    uta!.stageCancelOrder({ orderId })
+    uta!.commit('e2e: cancel limit order')
+    const cancelPush = await uta!.push()
     console.log(`  cancel pushed: submitted=${cancelPush.submitted.length}, status=${cancelPush.submitted[0]?.status}`)
     expect(cancelPush.submitted).toHaveLength(1)
 
     // Verify log has 2 commits
-    expect(uta.log().length).toBeGreaterThanOrEqual(2)
+    expect(uta!.log().length).toBeGreaterThanOrEqual(2)
   }, 30_000)
 })
 
@@ -77,14 +79,13 @@ describe('UTA — Alpaca order lifecycle', () => {
 
 describe('UTA — Alpaca fill flow (AAPL)', () => {
   beforeEach(({ skip }) => {
-    if (!broker) skip('no Alpaca paper account')
+    if (!uta) skip('no Alpaca paper account')
     if (!marketOpen) skip('market closed')
   })
 
   it('buy → sync → verify → close → sync → verify', async () => {
-    const uta = new UnifiedTradingAccount(broker!)
     const nativeKey = broker!.getNativeKey({ symbol: 'AAPL' } as any)
-    const aliceId = `${uta.id}|${nativeKey}`
+    const aliceId = `${uta!.id}|${nativeKey}`
 
     // Record initial state
     const initialPositions = await broker!.getPositions()
@@ -92,7 +93,7 @@ describe('UTA — Alpaca fill flow (AAPL)', () => {
     console.log(`  initial AAPL qty=${initialAaplQty}`)
 
     // === Stage + Commit + Push: buy 1 AAPL ===
-    const addResult = uta.stagePlaceOrder({
+    const addResult = uta!.stagePlaceOrder({
       aliceId,
       symbol: 'AAPL',
       side: 'buy',
@@ -101,11 +102,11 @@ describe('UTA — Alpaca fill flow (AAPL)', () => {
     })
     expect(addResult.staged).toBe(true)
 
-    const commitResult = uta.commit('e2e: buy 1 AAPL')
+    const commitResult = uta!.commit('e2e: buy 1 AAPL')
     expect(commitResult.prepared).toBe(true)
     console.log(`  committed: hash=${commitResult.hash}`)
 
-    const pushResult = await uta.push()
+    const pushResult = await uta!.push()
     console.log(`  pushed: submitted=${pushResult.submitted.length}, status=${pushResult.submitted[0]?.status}`)
     expect(pushResult.submitted).toHaveLength(1)
     expect(pushResult.rejected).toHaveLength(0)
@@ -113,7 +114,7 @@ describe('UTA — Alpaca fill flow (AAPL)', () => {
 
     // === Sync: depends on whether fill was synchronous ===
     if (pushResult.submitted[0].status === 'submitted') {
-      const sync1 = await uta.sync({ delayMs: 2000 })
+      const sync1 = await uta!.sync({ delayMs: 2000 })
       console.log(`  sync1: updatedCount=${sync1.updatedCount}`)
       expect(sync1.updatedCount).toBe(1)
       expect(sync1.updates[0].currentStatus).toBe('filled')
@@ -122,20 +123,20 @@ describe('UTA — Alpaca fill flow (AAPL)', () => {
     }
 
     // === Verify: position exists ===
-    const state1 = await uta.getState()
+    const state1 = await uta!.getState()
     const aaplPos = state1.positions.find(p => p.contract.symbol === 'AAPL')
     expect(aaplPos).toBeDefined()
     expect(aaplPos!.quantity.toNumber()).toBe(initialAaplQty + 1)
 
     // === Close 1 AAPL ===
-    uta.stageClosePosition({ aliceId, qty: 1 })
-    uta.commit('e2e: close 1 AAPL')
-    const closePush = await uta.push()
+    uta!.stageClosePosition({ aliceId, qty: 1 })
+    uta!.commit('e2e: close 1 AAPL')
+    const closePush = await uta!.push()
     console.log(`  close pushed: status=${closePush.submitted[0]?.status}`)
     expect(closePush.submitted).toHaveLength(1)
 
     if (closePush.submitted[0].status === 'submitted') {
-      const sync2 = await uta.sync({ delayMs: 2000 })
+      const sync2 = await uta!.sync({ delayMs: 2000 })
       expect(sync2.updatedCount).toBe(1)
     }
 
@@ -144,6 +145,6 @@ describe('UTA — Alpaca fill flow (AAPL)', () => {
     const finalAaplQty = finalPositions.find(p => p.contract.symbol === 'AAPL')?.quantity.toNumber() ?? 0
     expect(finalAaplQty).toBe(initialAaplQty)
 
-    expect(uta.log().length).toBeGreaterThanOrEqual(2)
+    expect(uta!.log().length).toBeGreaterThanOrEqual(2)
   }, 60_000)
 })

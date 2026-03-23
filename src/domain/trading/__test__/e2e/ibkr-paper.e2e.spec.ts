@@ -202,6 +202,9 @@ describe('IbkrBroker — fill + position (market hours)', () => {
   }, 20_000)
 
   it('closes AAPL position', async () => {
+    // Wait for TWS to update positions after preceding buy
+    await new Promise(r => setTimeout(r, 3000))
+
     const contract = new Contract()
     contract.symbol = 'AAPL'
     contract.secType = 'STK'
@@ -211,5 +214,5 @@ describe('IbkrBroker — fill + position (market hours)', () => {
     const result = await broker!.closePosition(contract)
     console.log(`  closePosition: success=${result.success}, error=${result.error}`)
     expect(result.success).toBe(true)
-  }, 15_000)
+  }, 20_000)
 })

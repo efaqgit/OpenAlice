@@ -91,6 +91,9 @@ export class IbkrBroker implements IBroker {
   // ==================== Lifecycle ====================
 
   async init(): Promise<void> {
+    // Idempotent — skip if already connected (e.g. UTA re-wrapping a shared broker)
+    if (this.client.isConnected()) return
+
     const host = this.config.host ?? '127.0.0.1'
     const port = this.config.port ?? 7497
     const clientId = this.config.clientId ?? 0
@@ -227,8 +230,9 @@ export class IbkrBroker implements IBroker {
       return { success: false, error: `No position for ${symbol ?? `conId=${contract.conId}`}` }
     }
 
-    // Use the position's contract for the close order — it has full routing info from TWS
+    // Use the position's contract (has conId etc.) but route via SMART
     const closeContract = pos.contract
+    closeContract.exchange = 'SMART'
     const order = new Order()
     order.action = pos.side === 'long' ? 'SELL' : 'BUY'
     order.orderType = 'MKT'
