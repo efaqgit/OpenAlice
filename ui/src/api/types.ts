@@ -79,6 +79,10 @@ export interface AppConfig {
     prompt: string
     activeHours: { start: string; end: string; timezone: string } | null
   }
+  snapshot: {
+    enabled: boolean
+    every: string
+  }
   connectors: ConnectorsConfig
   [key: string]: unknown
 }
@@ -316,4 +320,46 @@ export interface TestConnectionResult {
   success: boolean
   error?: string
   account?: unknown
+}
+
+// ==================== Snapshots ====================
+
+export interface UTASnapshotSummary {
+  accountId: string
+  timestamp: string
+  trigger: string
+  account: {
+    netLiquidation: string
+    totalCashValue: string
+    unrealizedPnL: string
+    realizedPnL: string
+    buyingPower?: string
+    initMarginReq?: string
+    maintMarginReq?: string
+  }
+  positions: Array<{
+    aliceId: string
+    side: 'long' | 'short'
+    quantity: string
+    avgCost: string
+    marketPrice: string
+    marketValue: string
+    unrealizedPnL: string
+    realizedPnL: string
+  }>
+  openOrders: Array<{
+    orderId: string
+    aliceId: string
+    action: string
+    orderType: string
+    totalQuantity: string
+    status: string
+  }>
+  health: string
+}
+
+export interface EquityCurvePoint {
+  timestamp: string
+  equity: string
+  accounts: Record<string, string>
 }

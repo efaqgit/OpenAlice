@@ -247,10 +247,40 @@ export class IbkrBroker implements IBroker {
   async getAccount(): Promise<AccountInfo> {
     const download = await this.downloadAccount()
 
+    // TotalCashValue is stable (cash doesn't change with market moves).
+    const totalCashValue = parseFloat(download.values.get('TotalCashValue') ?? '0')
+
+    // Reconstruct netLiquidation and unrealizedPnL from position-level data.
+    //
+    // TWS's account-level tags (NetLiquidation, UnrealizedPnL) are cached
+    // server-side and may not refresh between market sessions. However, the
+    // updatePortfolio() callbacks that populate download.positions carry
+    // per-position marketPrice, marketValue, and unrealizedPnL that are
+    // more current.
+    //
+    // Formula: netLiq = cash + Σ(position.marketValue)
+    //
+    // When there are no positions, fall back to the TWS-reported value
+    // since cash-only accounts have accurate NetLiquidation.
+    let totalMarketValue = 0
+    let positionUnrealizedPnL = 0
+    for (const pos of download.positions) {
+      totalMarketValue += pos.marketValue
+      positionUnrealizedPnL += pos.unrealizedPnL
+    }
+
+    const netLiquidation = download.positions.length > 0
+      ? totalCashValue + totalMarketValue
+      : parseFloat(download.values.get('NetLiquidation') ?? '0')
+
+    const unrealizedPnL = download.positions.length > 0
+      ? positionUnrealizedPnL
+      : parseFloat(download.values.get('UnrealizedPnL') ?? '0')
+
     return {
-      netLiquidation: parseFloat(download.values.get('NetLiquidation') ?? '0'),
-      totalCashValue: parseFloat(download.values.get('TotalCashValue') ?? '0'),
-      unrealizedPnL: parseFloat(download.values.get('UnrealizedPnL') ?? '0'),
+      netLiquidation,
+      totalCashValue,
+      unrealizedPnL,
       realizedPnL: parseFloat(download.values.get('RealizedPnL') ?? '0'),
       buyingPower: parseFloat(download.values.get('BuyingPower') ?? '0'),
       initMarginReq: parseFloat(download.values.get('InitMarginReq') ?? '0'),

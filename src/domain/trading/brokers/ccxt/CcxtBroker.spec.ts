@@ -609,12 +609,15 @@ describe('CcxtBroker — getAccount', () => {
       free: { USDT: 8000 },
       used: { USDT: 2000 },
     })
+    // Positions must include contracts/contractSize/markPrice so the broker
+    // can reconstruct netLiquidation from fresh position market values.
     ;(acc as any).exchange.fetchPositions = vi.fn().mockResolvedValue([
-      { unrealizedPnl: 500, realizedPnl: 100 },
-      { unrealizedPnl: -200, realizedPnl: 50 },
+      { contracts: 1, contractSize: 1, markPrice: 1500, unrealizedPnl: 500, realizedPnl: 100, side: 'long' },
+      { contracts: 1, contractSize: 1, markPrice: 500, unrealizedPnl: -200, realizedPnl: 50, side: 'long' },
     ])
 
     const info = await acc.getAccount()
+    // netLiq = free (8000) + position market values (1500 + 500 = 2000) = 10000
     expect(info.netLiquidation).toBe(10000)
     expect(info.totalCashValue).toBe(8000)
     expect(info.initMarginReq).toBe(2000)

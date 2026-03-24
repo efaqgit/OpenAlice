@@ -1,5 +1,5 @@
 import { fetchJson } from './client'
-import type { TradingAccount, AccountSummary, AccountInfo, Position, WalletCommitLog, ReconnectResult, AccountConfig, WalletStatus, WalletPushResult, WalletRejectResult, TestConnectionResult, BrokerTypeInfo } from './types'
+import type { TradingAccount, AccountSummary, AccountInfo, Position, WalletCommitLog, ReconnectResult, AccountConfig, WalletStatus, WalletPushResult, WalletRejectResult, TestConnectionResult, BrokerTypeInfo, UTASnapshotSummary, EquityCurvePoint } from './types'
 
 // ==================== Unified Trading API ====================
 
@@ -111,6 +111,26 @@ export const tradingApi = {
       throw new Error(body.error || `Failed to delete account (${res.status})`)
     }
   },
+
+  // ==================== Snapshots ====================
+
+  async snapshots(accountId: string, opts?: { limit?: number; startTime?: string; endTime?: string }): Promise<{ snapshots: UTASnapshotSummary[] }> {
+    const params = new URLSearchParams()
+    if (opts?.limit) params.set('limit', String(opts.limit))
+    if (opts?.startTime) params.set('startTime', opts.startTime)
+    if (opts?.endTime) params.set('endTime', opts.endTime)
+    return fetchJson(`/api/trading/accounts/${accountId}/snapshots?${params}`)
+  },
+
+  async equityCurve(opts?: { startTime?: string; endTime?: string; limit?: number }): Promise<{ points: EquityCurvePoint[] }> {
+    const params = new URLSearchParams()
+    if (opts?.limit) params.set('limit', String(opts.limit))
+    if (opts?.startTime) params.set('startTime', opts.startTime)
+    if (opts?.endTime) params.set('endTime', opts.endTime)
+    return fetchJson(`/api/trading/snapshots/equity-curve?${params}`)
+  },
+
+  // ==================== Connection Testing ====================
 
   async testConnection(account: AccountConfig): Promise<TestConnectionResult> {
     const res = await fetch('/api/trading/config/test-connection', {

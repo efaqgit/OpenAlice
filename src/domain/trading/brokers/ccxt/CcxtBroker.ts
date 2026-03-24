@@ -417,19 +417,36 @@ export class CcxtBroker implements IBroker<CcxtBrokerMeta> {
       ])
 
       const bal = balance as unknown as Record<string, Record<string, unknown>>
-      const total = parseFloat(String(bal['total']?.['USDT'] ?? bal['total']?.['USD'] ?? 0))
       const free = parseFloat(String(bal['free']?.['USDT'] ?? bal['free']?.['USD'] ?? 0))
       const used = parseFloat(String(bal['used']?.['USDT'] ?? bal['used']?.['USD'] ?? 0))
 
+      // Aggregate P&L and market value from positions.
+      // We use position-level markPrice (which is fresh from the exchange's
+      // websocket feed) rather than balance.total (which is a cached wallet
+      // snapshot that may not update between funding/settlement cycles).
       let unrealizedPnL = 0
       let realizedPnL = 0
+      let totalPositionValue = 0
       for (const p of rawPositions) {
         unrealizedPnL += parseFloat(String(p.unrealizedPnl ?? 0))
         realizedPnL += parseFloat(String((p as unknown as Record<string, unknown>).realizedPnl ?? 0))
+
+        // Compute position market value from fresh markPrice
+        const contracts = new Decimal(String(p.contracts ?? 0)).abs()
+        const contractSize = new Decimal(String(p.contractSize ?? 1))
+        const quantity = contracts.mul(contractSize)
+        const markPrice = parseFloat(String(p.markPrice ?? 0))
+        totalPositionValue += quantity.toNumber() * markPrice
       }
 
+      // Reconstruct netLiquidation from fresh components:
+      //   netLiq = available cash + total position market value
+      // This gives a real-time equity figure that tracks markPrice movements,
+      // unlike balance.total which only updates on exchange settlement.
+      const netLiquidation = free + totalPositionValue
+
       return {
-        netLiquidation: total,
+        netLiquidation,
         totalCashValue: free,
         unrealizedPnL,
         realizedPnL,
