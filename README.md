@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/TraderAlice/OpenAlice/actions/workflows/ci.yml"><img src="https://github.com/TraderAlice/OpenAlice/actions/workflows/ci.yml/badge.svg" alt="CI"></a> · <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg" alt="License: AGPL-3.0"></a> · <a href="https://deepwiki.com/TraderAlice/OpenAlice"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a> · <a href="https://traderalice.com"><img src="https://img.shields.io/badge/Website-Visit-blue" alt="traderalice.com"></a>
+  <a href="https://github.com/TraderAlice/OpenAlice/actions/workflows/ci.yml"><img src="https://github.com/TraderAlice/OpenAlice/actions/workflows/ci.yml/badge.svg" alt="CI"></a> · <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg" alt="License: AGPL-3.0"></a> · <a href="https://openalice.ai"><img src="https://img.shields.io/badge/Website-openalice.ai-blue" alt="openalice.ai"></a> · <a href="https://openalice.ai/docs"><img src="https://img.shields.io/badge/Docs-Read-green" alt="Docs"></a> · <a href="https://deepwiki.com/TraderAlice/OpenAlice"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
 </p>
 
 # Open Alice
@@ -196,85 +196,93 @@ On first run, defaults are auto-copied to the user override path. Edit the user 
 
 ## Project Structure
 
+Open Alice is a pnpm monorepo with Turborepo build orchestration.
+
 ```
+packages/
+├── ibkr/                      # @traderalice/ibkr — IBKR TWS API TypeScript port
+└── opentypebb/                # @traderalice/opentypebb — OpenBB platform TS port
+ui/                            # React frontend (Vite, 13 pages)
 src/
-  main.ts                    # Composition root — wires everything together
-  core/
-    agent-center.ts          # Top-level AI orchestration, owns ProviderRouter
-    ai-provider-manager.ts   # GenerateRouter + StreamableResult + AskOptions
-    tool-center.ts           # Centralized tool registry (Vercel + MCP export)
-    session.ts               # JSONL session store + format converters
-    compaction.ts            # Auto-summarize long context windows
-    config.ts                # Zod-validated config loader (generic account schema with brokerConfig)
-    ai-config.ts             # Runtime AI provider selection
-    event-log.ts             # Append-only JSONL event log
-    connector-center.ts      # ConnectorCenter — push delivery + last-interacted tracking
-    async-channel.ts         # AsyncChannel for streaming provider events to SSE
-    model-factory.ts         # Model instance factory for Vercel AI SDK
-    media.ts                 # MediaAttachment extraction
-    media-store.ts           # Media file persistence
-    types.ts                 # Plugin, EngineContext interfaces
-  ai-providers/
-    vercel-ai-sdk/           # Vercel AI SDK ToolLoopAgent wrapper
-    agent-sdk/               # Claude backend (@anthropic-ai/claude-agent-sdk, OAuth + API key)
-  domain/
-    trading/                 # Unified multi-account trading, guard pipeline, git-like commits
-      UnifiedTradingAccount.ts  # UTA class — owns broker + git + guards + snapshots
-      account-manager.ts     # UTA lifecycle (init, reconnect, enable/disable) + registry
-      git-persistence.ts     # Git state load/save
-      brokers/
-        registry.ts          # Broker self-registration (configSchema + configFields + fromConfig)
-        alpaca/              # Alpaca (US equities)
-        ccxt/                # CCXT (100+ crypto exchanges)
-        ibkr/                # Interactive Brokers (TWS/Gateway)
-        mock/                # In-memory test broker
-      git/                   # Trading-as-Git engine (stage → commit → push)
-      guards/                # Pre-execution safety checks (position size, cooldown, whitelist)
-      snapshot/              # Periodic + event-driven account state capture, equity curve
-    market-data/             # Structured data layer (typebb in-process + OpenBB API remote)
-      equity/                # Equity data + SymbolIndex (SEC/TMX local cache)
-      crypto/                # Crypto data layer
-      currency/              # Currency/forex data layer
-      commodity/             # Commodity data layer (EIA, spot prices)
-      economy/               # Macro economy data layer
-      client/                # Data backend clients (typebb SDK, openbb-api)
-    analysis/                # Indicators, technical analysis
-    news/                    # RSS collector + archive search
-    brain/                   # Cognitive state (memory, emotion)
-    thinking/                # Safe expression evaluator
-  tool/                      # AI tool definitions — thin bridge from domain to ToolCenter
-    trading.ts               # Trading tools (delegates to domain/trading)
-    equity.ts                # Equity fundamental tools (uses domain/market-data)
-    market.ts                # Symbol search tools (uses domain/market-data)
-    analysis.ts              # Indicator calculation tools (uses domain/analysis)
-    news.ts                  # News archive tools (uses domain/news)
-    brain.ts                 # Cognition tools (uses domain/brain)
-    thinking.ts              # Reasoning tools (uses domain/thinking)
-    browser.ts               # Browser automation tools (wraps openclaw)
-  server/
-    mcp.ts                   # MCP protocol server
-    opentypebb.ts            # Embedded OpenBB-compatible HTTP API (optional)
-  connectors/
-    web/                     # Web UI chat (Hono, SSE streaming, sub-channels)
-    telegram/                # Telegram bot (grammY, polling, commands)
-    mcp-ask/                 # MCP Ask connector (external agent conversation)
-  task/
-    cron/                    # Cron scheduling (engine, listener, AI tools)
-    heartbeat/               # Periodic heartbeat with structured response protocol
-  openclaw/                  # ⚠️ Frozen — DO NOT MODIFY
+├── main.ts                    # Composition root — wires everything together
+├── core/
+│   ├── agent-center.ts        # Top-level AI orchestration, owns ProviderRouter
+│   ├── ai-provider-manager.ts # GenerateRouter + StreamableResult + AskOptions
+│   ├── tool-center.ts         # Centralized tool registry (Vercel + MCP export)
+│   ├── mcp-export.ts          # Shared MCP export layer with type coercion
+│   ├── session.ts             # JSONL session store + format converters
+│   ├── compaction.ts          # Auto-summarize long context windows
+│   ├── config.ts              # Zod-validated config loader
+│   ├── event-log.ts           # Append-only JSONL event log
+│   ├── connector-center.ts    # ConnectorCenter — push delivery + last-interacted tracking
+│   ├── async-channel.ts       # AsyncChannel for streaming provider events to SSE
+│   ├── tool-call-log.ts       # Tool invocation logging
+│   ├── media.ts               # MediaAttachment extraction
+│   ├── media-store.ts         # Media file persistence
+│   └── types.ts               # Plugin, EngineContext interfaces
+├── ai-providers/
+│   ├── vercel-ai-sdk/         # Vercel AI SDK ToolLoopAgent wrapper
+│   ├── agent-sdk/             # Claude backend (@anthropic-ai/claude-agent-sdk, OAuth + API key)
+│   └── mock/                  # Mock provider (testing)
+├── domain/
+│   ├── trading/               # Unified multi-account trading, guard pipeline, git-like commits
+│   │   ├── account-manager.ts # UTA lifecycle (init, reconnect, enable/disable) + registry
+│   │   ├── git-persistence.ts # Git state load/save
+│   │   ├── brokers/
+│   │   │   ├── registry.ts    # Broker self-registration (configSchema + configFields + fromConfig)
+│   │   │   ├── alpaca/        # Alpaca (US equities)
+│   │   │   ├── ccxt/          # CCXT (100+ crypto exchanges)
+│   │   │   ├── ibkr/          # Interactive Brokers (TWS/Gateway)
+│   │   │   └── mock/          # In-memory test broker
+│   │   ├── git/               # Trading-as-Git engine (stage → commit → push)
+│   │   ├── guards/            # Pre-execution safety checks (position size, cooldown, whitelist)
+│   │   └── snapshot/          # Periodic + event-driven account state capture, equity curve
+│   ├── market-data/           # Structured data layer (opentypebb in-process + OpenBB API remote)
+│   │   ├── equity/            # Equity data + SymbolIndex (SEC/TMX local cache)
+│   │   ├── crypto/            # Crypto data layer
+│   │   ├── currency/          # Currency/forex data layer
+│   │   ├── commodity/         # Commodity data layer (EIA, spot prices)
+│   │   ├── economy/           # Macro economy data layer
+│   │   └── client/            # Data backend clients (opentypebb SDK, openbb-api)
+│   ├── analysis/              # Indicators, technical analysis
+│   ├── news/                  # RSS collector + archive search
+│   ├── brain/                 # Cognitive state (memory, emotion)
+│   └── thinking/              # Safe expression evaluator
+├── tool/                      # AI tool definitions — thin bridge from domain to ToolCenter
+│   ├── trading.ts             # Trading tools (delegates to domain/trading)
+│   ├── equity.ts              # Equity fundamental tools
+│   ├── market.ts              # Symbol search tools
+│   ├── analysis.ts            # Indicator calculation tools
+│   ├── news.ts                # News archive tools
+│   ├── brain.ts               # Cognition tools
+│   ├── thinking.ts            # Reasoning tools
+│   ├── browser.ts             # Browser automation tools (wraps openclaw)
+│   └── session.ts             # Session awareness tools
+├── server/
+│   ├── mcp.ts                 # MCP protocol server
+│   └── opentypebb.ts          # Embedded OpenBB-compatible HTTP API (optional)
+├── connectors/
+│   ├── web/                   # Web UI (Hono, SSE streaming, sub-channels)
+│   ├── telegram/              # Telegram bot (grammY, magic link auth, /trading panel)
+│   ├── mcp-ask/               # MCP Ask connector (external agent conversation)
+│   └── mock/                  # Mock connector (testing)
+├── task/
+│   ├── cron/                  # Cron scheduling (engine, listener, AI tools)
+│   └── heartbeat/             # Periodic heartbeat with structured response protocol
+└── openclaw/                  # ⚠️ Frozen — DO NOT MODIFY
 data/
-  config/                    # JSON configuration files
-  sessions/                  # JSONL conversation histories
-  brain/                     # Agent memory and emotion logs
-  cache/                     # API response caches
-  trading/                   # Trading commit history + snapshots (per-account)
-  news-collector/            # Persistent news archive (JSONL)
-  cron/                      # Cron job definitions (jobs.json)
-  event-log/                 # Persistent event log (events.jsonl)
-  tool-calls/                # Tool invocation logs
-  media/                     # Uploaded attachments
-default/                     # Factory defaults (persona, heartbeat prompts)
-docs/                        # Architecture documentation
+├── config/                    # JSON configuration files
+├── sessions/                  # JSONL conversation histories (web/, telegram/, cron/)
+├── brain/                     # Agent memory and emotion logs
+├── cache/                     # API response caches
+├── trading/                   # Trading commit history + snapshots (per-account)
+├── news-collector/            # Persistent news archive (JSONL)
+├── cron/                      # Cron job definitions (jobs.json)
+├── event-log/                 # Persistent event log (events.jsonl)
+├── tool-calls/                # Tool invocation logs
+└── media/                     # Uploaded attachments
+default/                       # Factory defaults (persona, heartbeat, skills)
+docs/                          # Documentation
 ```
 
 ## Roadmap to v1
