@@ -69,6 +69,11 @@ export const configApi = {
     }
   },
 
+  async testProfile(slug: string): Promise<{ ok: boolean; response?: string; error?: string }> {
+    const res = await fetch(`/api/config/profiles/${slug}/test`, { method: 'POST' })
+    return res.json()
+  },
+
   async setActiveProfile(slug: string): Promise<void> {
     const res = await fetch('/api/config/active-profile', {
       method: 'PUT',

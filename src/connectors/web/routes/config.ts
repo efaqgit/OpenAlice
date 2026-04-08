@@ -8,10 +8,11 @@ import type { EngineContext } from '../../../core/types.js'
 import { BUILTIN_PRESETS } from '../../../ai-providers/presets.js'
 
 interface ConfigRouteOpts {
+  ctx?: EngineContext
   onConnectorsChange?: () => Promise<void>
 }
 
-/** Config routes: GET /, PUT /:section, profile CRUD, api-keys */
+/** Config routes: GET /, PUT /:section, profile CRUD, presets, test */
 export function createConfigRoutes(opts?: ConfigRouteOpts) {
   const app = new Hono()
 
@@ -100,6 +101,20 @@ export function createConfigRoutes(opts?: ConfigRouteOpts) {
 
   /** GET /presets — built-in preset templates for profile creation */
   app.get('/presets', (c) => c.json({ presets: BUILTIN_PRESETS }))
+
+  // ==================== Profile Test ====================
+
+  /** POST /profiles/:slug/test — test a saved profile by sending "Hi" to its provider */
+  app.post('/profiles/:slug/test', async (c) => {
+    if (!opts?.ctx) return c.json({ ok: false, error: 'Test not available' }, 500)
+    try {
+      const slug = c.req.param('slug')
+      const result = await opts.ctx.agentCenter.testProfile(slug)
+      return c.json({ ok: true, response: result.text })
+    } catch (err) {
+      return c.json({ ok: false, error: err instanceof Error ? err.message : String(err) })
+    }
+  })
 
   // ==================== Generic Section Writer ====================
 

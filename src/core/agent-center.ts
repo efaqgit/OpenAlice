@@ -58,6 +58,12 @@ export class AgentCenter {
     return this.router.ask(prompt)
   }
 
+  /** Test a profile by sending a prompt to its provider. Used for connection testing. */
+  async testProfile(profileSlug: string, prompt = 'Hi'): Promise<ProviderResult> {
+    const { provider } = await this.router.resolve(profileSlug)
+    return provider.ask(prompt)
+  }
+
   /** Prompt with session history — full orchestration pipeline. */
   askWithSession(prompt: string, session: ISessionStore, opts?: AskOptions): StreamableResult {
     return new StreamableResult(this._generate(prompt, session, opts))

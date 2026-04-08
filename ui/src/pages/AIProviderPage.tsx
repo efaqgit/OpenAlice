@@ -96,7 +96,7 @@ export function AIProviderPage() {
           onSave={(p) => handleProfileUpdate(editingSlug, p)}
           onDelete={() => handleDelete(editingSlug)} onClose={() => setEditingSlug(null)} />
       )}
-      {showCreate && <ProfileCreateModal presets={presets} onSave={handleCreateSave} onClose={() => setShowCreate(false)} />}
+      {showCreate && <ProfileCreateModal presets={presets} existingNames={Object.keys(profiles)} onSave={handleCreateSave} onClose={() => setShowCreate(false)} />}
     </div>
   )
 }
@@ -222,23 +222,33 @@ function ProfileEditModal({ slug, profile, presets, isActive, onSave, onDelete, 
 
 // ==================== Create Modal ====================
 
-function ProfileCreateModal({ presets, onSave, onClose }: {
-  presets: Preset[]; onSave: (name: string, profile: Profile) => Promise<void>; onClose: () => void
+function ProfileCreateModal({ presets, existingNames, onSave, onClose }: {
+  presets: Preset[]; existingNames: string[]
+  onSave: (name: string, profile: Profile) => Promise<void>; onClose: () => void
 }) {
   const [selectedPreset, setSelectedPreset] = useState<Preset | null>(null)
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<{ ok: boolean; response?: string; error?: string } | null>(null)
   const [error, setError] = useState('')
+
+  const existingSet = new Set(existingNames)
 
   const { fields, formData, setField, getSubmitData, validate } = useSchemaForm(
     selectedPreset?.schema,
   )
 
   const selectPreset = (preset: Preset) => {
+    // If official preset already configured, don't open create form
+    if (preset.defaultName && existingSet.has(preset.defaultName)) return
     setSelectedPreset(preset)
     setName(preset.defaultName)
+    setTestResult(null)
     setError('')
   }
+
+  const isOfficialPreset = selectedPreset ? !!selectedPreset.defaultName : false
 
   const handleCreate = async () => {
     if (!selectedPreset) return
@@ -246,19 +256,53 @@ function ProfileCreateModal({ presets, onSave, onClose }: {
     if (!trimmedName) { setError('Profile name is required'); return }
     const validationError = validate()
     if (validationError) { setError(validationError); return }
+
     setSaving(true); setError('')
     try {
       const data = getSubmitData()
       data.preset = selectedPreset.id
+      // Save first
       await onSave(trimmedName, data as unknown as Profile)
+
+      // Then test connectivity
+      setTesting(true)
+      const result = await api.config.testProfile(trimmedName)
+      setTestResult(result)
+      setTesting(false)
+
+      if (result.ok) {
+        // Auto-close after brief success display
+        setTimeout(onClose, 1500)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create')
+      setTesting(false)
     } finally { setSaving(false) }
   }
 
   const officialPresets = presets.filter(p => p.category === 'official')
   const thirdPartyPresets = presets.filter(p => p.category === 'third-party')
   const customPreset = presets.find(p => p.category === 'custom')
+
+  const renderPresetCard = (p: Preset) => {
+    const alreadyExists = !!p.defaultName && existingSet.has(p.defaultName)
+    return (
+      <button key={p.id} onClick={() => selectPreset(p)} disabled={alreadyExists}
+        className={`flex items-start gap-2.5 p-3 rounded-lg border transition-all text-left ${
+          alreadyExists
+            ? 'border-border bg-bg-secondary/50 opacity-50 cursor-not-allowed'
+            : 'border-border bg-bg hover:bg-bg-tertiary hover:border-accent/40'
+        }`}>
+        <div className="text-text-muted mt-0.5">{BACKEND_ICONS[getSchemaConst(p.schema, 'backend') as AIBackend ?? 'vercel-ai-sdk']}</div>
+        <div>
+          <p className="text-[12px] font-medium text-text">{p.label}</p>
+          <p className="text-[10px] text-text-muted mt-0.5 leading-snug">
+            {alreadyExists ? 'Already configured — edit from the list' : p.description}
+          </p>
+        </div>
+      </button>
+    )
+  }
 
   return (
     <Modal title={selectedPreset ? `New: ${selectedPreset.label}` : 'New Profile'} onClose={onClose}>
@@ -267,33 +311,13 @@ function ProfileCreateModal({ presets, onSave, onClose }: {
           {officialPresets.length > 0 && (
             <div>
               <p className="text-[11px] font-medium text-text-muted mb-2 uppercase tracking-wider">Official</p>
-              <div className="grid grid-cols-2 gap-2">
-                {officialPresets.map((p) => (
-                  <button key={p.id} onClick={() => selectPreset(p)} className="flex items-start gap-2.5 p-3 rounded-lg border border-border bg-bg hover:bg-bg-tertiary hover:border-accent/40 transition-all text-left">
-                    <div className="text-text-muted mt-0.5">{BACKEND_ICONS[getSchemaConst(p.schema, 'backend') as AIBackend ?? 'vercel-ai-sdk']}</div>
-                    <div>
-                      <p className="text-[12px] font-medium text-text">{p.label}</p>
-                      <p className="text-[10px] text-text-muted mt-0.5 leading-snug">{p.description}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
+              <div className="grid grid-cols-2 gap-2">{officialPresets.map(renderPresetCard)}</div>
             </div>
           )}
           {thirdPartyPresets.length > 0 && (
             <div>
               <p className="text-[11px] font-medium text-text-muted mb-2 uppercase tracking-wider">Third Party</p>
-              <div className="grid grid-cols-2 gap-2">
-                {thirdPartyPresets.map((p) => (
-                  <button key={p.id} onClick={() => selectPreset(p)} className="flex items-start gap-2.5 p-3 rounded-lg border border-border bg-bg hover:bg-bg-tertiary hover:border-accent/40 transition-all text-left">
-                    <div className="text-text-muted mt-0.5">{BACKEND_ICONS[getSchemaConst(p.schema, 'backend') as AIBackend ?? 'vercel-ai-sdk']}</div>
-                    <div>
-                      <p className="text-[12px] font-medium text-text">{p.label}</p>
-                      <p className="text-[10px] text-text-muted mt-0.5 leading-snug">{p.description}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
+              <div className="grid grid-cols-2 gap-2">{thirdPartyPresets.map(renderPresetCard)}</div>
             </div>
           )}
           {customPreset && (
@@ -307,12 +331,25 @@ function ProfileCreateModal({ presets, onSave, onClose }: {
         <div className="space-y-3">
           {selectedPreset.hint && <p className="text-[11px] text-text-muted bg-bg-tertiary rounded-lg p-3 leading-relaxed">{selectedPreset.hint}</p>}
           <Field label="Profile Name">
-            <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} placeholder={`e.g. My ${selectedPreset.label}`} autoFocus />
+            {isOfficialPreset ? (
+              <p className="text-[13px] text-text py-2">{name}</p>
+            ) : (
+              <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter a name for this profile" autoFocus />
+            )}
           </Field>
           <SchemaFormFields fields={fields} formData={formData} setField={setField} />
           {error && <p className="text-[12px] text-red">{error}</p>}
+          {/* Test result */}
+          {testing && <p className="text-[12px] text-text-muted">Testing connection...</p>}
+          {testResult && (
+            <div className={`text-[12px] rounded-lg p-3 ${testResult.ok ? 'bg-green/10 text-green' : 'bg-red/10 text-red'}`}>
+              {testResult.ok ? `Connected: "${testResult.response?.slice(0, 100)}"` : `Failed: ${testResult.error}`}
+            </div>
+          )}
           <div className="flex items-center gap-2 pt-2 border-t border-border mt-4">
-            <button onClick={handleCreate} disabled={saving} className="btn-primary">{saving ? 'Creating...' : 'Create'}</button>
+            <button onClick={handleCreate} disabled={saving || testing} className="btn-primary">
+              {saving ? 'Creating...' : testing ? 'Testing...' : 'Create & Test'}
+            </button>
             <button onClick={() => setSelectedPreset(null)} className="btn-secondary">Back</button>
           </div>
         </div>
