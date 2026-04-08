@@ -54,6 +54,7 @@ export class AgentSdkProvider implements AIProvider {
     }
     const mcpServer = await this.buildMcpServer()
     const result = await askAgentSdk(prompt, config, override, mcpServer)
+    if (!result.ok) throw new Error(result.text)
     return { text: result.text, media: [] }
   }
 
