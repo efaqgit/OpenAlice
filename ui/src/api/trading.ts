@@ -1,5 +1,5 @@
 import { fetchJson } from './client'
-import type { TradingAccount, AccountSummary, AccountInfo, Position, WalletCommitLog, ReconnectResult, AccountConfig, WalletStatus, WalletPushResult, WalletRejectResult, TestConnectionResult, BrokerTypeInfo, UTASnapshotSummary, EquityCurvePoint } from './types'
+import type { TradingAccount, AccountSummary, AccountInfo, Position, WalletCommitLog, ReconnectResult, AccountConfig, WalletStatus, WalletPushResult, WalletRejectResult, TestConnectionResult, BrokerTypeInfo, BrokerConfigField, UTASnapshotSummary, EquityCurvePoint } from './types'
 
 // ==================== Unified Trading API ====================
 
@@ -89,6 +89,14 @@ export const tradingApi = {
 
   async getBrokerTypes(): Promise<{ brokerTypes: BrokerTypeInfo[] }> {
     return fetchJson('/api/trading/config/broker-types')
+  },
+
+  async getCcxtExchanges(): Promise<{ exchanges: string[] }> {
+    return fetchJson('/api/trading/config/ccxt/exchanges')
+  },
+
+  async getCcxtCredentialFields(exchange: string): Promise<{ fields: BrokerConfigField[] }> {
+    return fetchJson(`/api/trading/config/ccxt/exchanges/${encodeURIComponent(exchange)}/credentials`)
   },
 
   // ==================== Trading Config CRUD ====================
