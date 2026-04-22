@@ -218,6 +218,16 @@ const connectorsSchema = z.object({
   }).default({ enabled: false, chatIds: [] }),
 })
 
+export const mcpServerConfigSchema = z.object({
+  command: z.string(),
+  args: z.array(z.string()).default([]),
+  env: z.record(z.string(), z.string()).optional(),
+})
+
+export const mcpServersConfigSchema = z.record(z.string(), z.lazy(() => mcpServerConfigSchema)).default({})
+
+export type McpServersConfig = z.infer<typeof mcpServersConfigSchema>
+
 const heartbeatSchema = z.object({
   enabled: z.boolean().default(false),
   every: z.string().default('30m'),
@@ -286,6 +296,7 @@ export type Config = {
   connectors: z.infer<typeof connectorsSchema>
   news: z.infer<typeof newsCollectorSchema>
   tools: z.infer<typeof toolsSchema>
+  mcpServers: McpServersConfig
 }
 
 // ==================== Loader ====================
@@ -318,7 +329,7 @@ async function parseAndSeed<T>(filename: string, schema: z.ZodType<T>, raw: unkn
 }
 
 export async function loadConfig(): Promise<Config> {
-  const files = ['engine.json', 'agent.json', 'crypto.json', 'securities.json', 'market-data.json', 'compaction.json', 'ai-provider-manager.json', 'heartbeat.json', 'snapshot.json', 'connectors.json', 'news.json', 'tools.json'] as const
+  const files = ['engine.json', 'agent.json', 'crypto.json', 'securities.json', 'market-data.json', 'compaction.json', 'ai-provider-manager.json', 'heartbeat.json', 'snapshot.json', 'connectors.json', 'news.json', 'tools.json', 'mcp-servers.json'] as const
   const raws = await Promise.all(files.map((f) => loadJsonFile(f)))
 
   // TODO: remove all migration blocks before v1.0 — no stable release yet, breaking changes are fine
@@ -375,8 +386,8 @@ export async function loadConfig(): Promise<Config> {
         const provider = ch.provider as string | undefined
         const override = provider === 'vercel-ai-sdk' ? ch.vercelAiSdk
           : provider === 'agent-sdk' ? ch.agentSdk
-          : provider === 'codex' ? ch.codex
-          : undefined
+            : provider === 'codex' ? ch.codex
+              : undefined
 
         if (provider && override) {
           const slug = `${ch.id}-${provider}`
@@ -472,18 +483,19 @@ export async function loadConfig(): Promise<Config> {
   }
 
   return {
-    engine:        await parseAndSeed(files[0], engineSchema, raws[0]),
-    agent:         await parseAndSeed(files[1], agentSchema, raws[1]),
-    crypto:        await parseAndSeed(files[2], cryptoSchema, raws[2]),
-    securities:    await parseAndSeed(files[3], securitiesSchema, raws[3]),
-    marketData:    await parseAndSeed(files[4], marketDataSchema, raws[4]),
-    compaction:    await parseAndSeed(files[5], compactionSchema, raws[5]),
-    aiProvider:    await parseAndSeed(files[6], aiProviderSchema, raws[6]),
-    heartbeat:     await parseAndSeed(files[7], heartbeatSchema, raws[7]),
-    snapshot:      await parseAndSeed(files[8], snapshotSchema, raws[8]),
-    connectors:    await parseAndSeed(files[9], connectorsSchema, raws[9]),
-    news:          await parseAndSeed(files[10], newsCollectorSchema, raws[10]),
-    tools:         await parseAndSeed(files[11], toolsSchema, raws[11]),
+    engine: await parseAndSeed(files[0], engineSchema, raws[0]),
+    agent: await parseAndSeed(files[1], agentSchema, raws[1]),
+    crypto: await parseAndSeed(files[2], cryptoSchema, raws[2]),
+    securities: await parseAndSeed(files[3], securitiesSchema, raws[3]),
+    marketData: await parseAndSeed(files[4], marketDataSchema, raws[4]),
+    compaction: await parseAndSeed(files[5], compactionSchema, raws[5]),
+    aiProvider: await parseAndSeed(files[6], aiProviderSchema, raws[6]),
+    heartbeat: await parseAndSeed(files[7], heartbeatSchema, raws[7]),
+    snapshot: await parseAndSeed(files[8], snapshotSchema, raws[8]),
+    connectors: await parseAndSeed(files[9], connectorsSchema, raws[9]),
+    news: await parseAndSeed(files[10], newsCollectorSchema, raws[10]),
+    tools: await parseAndSeed(files[11], toolsSchema, raws[11]),
+    mcpServers: await parseAndSeed(files[12], mcpServersConfigSchema, raws[12]),
   }
 }
 
@@ -582,6 +594,16 @@ export async function readConnectorsConfig() {
   }
 }
 
+/** Read MCP servers config from disk. */
+export async function readMcpServersConfig() {
+  try {
+    const raw = JSON.parse(await readFile(resolve(CONFIG_DIR, 'mcp-servers.json'), 'utf-8'))
+    return mcpServersConfigSchema.parse(raw)
+  } catch {
+    return mcpServersConfigSchema.parse({})
+  }
+}
+
 // ==================== Profile Helpers ====================
 
 /** Resolved profile — all fields needed by providers. */
@@ -601,7 +623,17 @@ export async function resolveProfile(slug?: string): Promise<ResolvedProfile> {
   const key = slug ?? config.activeProfile
   const profile = config.profiles[key]
   if (!profile) throw new Error(`Unknown AI provider profile: "${key}"`)
-  return { ...profile }
+  const vendor = profile.backend === 'codex' ? 'openai'
+    : profile.backend === 'agent-sdk' ? 'anthropic'
+      : (profile as { provider?: string }).provider ?? 'anthropic'
+
+  const envKey = `${vendor.toUpperCase()}_API_KEY`
+  const envValue = process.env[envKey]
+
+  return {
+    ...profile,
+    apiKey: profile.apiKey ?? (config.apiKeys as Record<string, string | undefined>)[vendor] ?? envValue,
+  }
 }
 
 /** Get the active profile slug. */
@@ -653,6 +685,7 @@ const sectionSchemas: Record<ConfigSection, z.ZodTypeAny> = {
   connectors: connectorsSchema,
   news: newsCollectorSchema,
   tools: toolsSchema,
+  mcpServers: mcpServersConfigSchema,
 }
 
 const sectionFiles: Record<ConfigSection, string> = {
@@ -668,6 +701,7 @@ const sectionFiles: Record<ConfigSection, string> = {
   connectors: 'connectors.json',
   news: 'news.json',
   tools: 'tools.json',
+  mcpServers: 'mcp-servers.json',
 }
 
 /** All valid config section names (derived from sectionSchemas). */

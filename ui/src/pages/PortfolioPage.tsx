@@ -7,6 +7,8 @@ import { EmptyState } from '../components/StateViews'
 import { EquityCurve } from '../components/EquityCurve'
 import { SnapshotDetail } from '../components/SnapshotDetail'
 import { Toggle } from '../components/Toggle'
+import { KLineChart } from '../components/KLineChart'
+import { ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
 // ==================== Types ====================
 
@@ -56,6 +58,7 @@ export function PortfolioPage() {
   const [selectedSnapshot, setSelectedSnapshot] = useState<UTASnapshotSummary | null>(null)
   const [snapshotEnabled, setSnapshotEnabled] = useState(true)
   const [snapshotEvery, setSnapshotEvery] = useState('15m')
+  const [activeChart, setActiveChart] = useState<{ accountId: string; symbol: string } | null>(null)
 
   const snapshotConfig = useMemo(() => ({ enabled: snapshotEnabled, every: snapshotEvery }), [snapshotEnabled, snapshotEvery])
   const saveSnapshotConfig = useCallback(async (d: Record<string, unknown>) => {
@@ -201,30 +204,184 @@ export function PortfolioPage() {
               <AccountStrip sources={accountSources} />
             )}
 
-            {allPositions.length > 0 && (
-              <PositionsTable positions={allPositions} fxRates={data.fxRates} />
-            )}
-
-            {/* Empty states */}
-            {data.accounts.length === 0 && !loading && (
-              <EmptyState title="No trading accounts connected." description="Configure connections in the Trading page." />
-            )}
-            {data.accounts.length > 0 && allPositions.length === 0 && !loading && (
-              <EmptyState title="No open positions." />
-            )}
-
             {allWalletLogs.length > 0 && (
               <TradeLog commits={allWalletLogs} />
             )}
           </div>
-
-          {/* Right sidebar — FX rates */}
-          {data.fxRates.length > 0 && (
-            <div className="hidden lg:block w-[200px] shrink-0 sticky top-5">
-              <FxRatesPanel rates={data.fxRates} />
-            </div>
-          )}
         </div>
+
+        {/* Terminal Section: Tickers (Left) | Large View (Right) */}
+        <div className="flex flex-col lg:flex-row gap-6 mt-10 border-t border-border pt-8">
+          {/* Ticker List */}
+          <div className={`${activeChart ? 'lg:w-[420px]' : 'w-full'} shrink-0 space-y-4`}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-[14px] font-bold text-text uppercase tracking-wider flex items-center gap-2">
+                <svg className="w-4 h-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                </svg>
+                Tickers
+              </h3>
+              {activeChart && (
+                <button onClick={() => setActiveChart(null)} className="text-[11px] text-accent hover:underline">
+                  Back to Full List
+                </button>
+              )}
+            </div>
+            
+            <PositionsTable 
+              positions={allPositions} 
+              fxRates={data.fxRates} 
+              onViewChart={(accountId, symbol) => setActiveChart({ accountId, symbol })}
+              compact={!!activeChart}
+            />
+
+            {allPositions.length === 0 && !loading && (
+              <div className="py-10 text-center border border-dashed border-border rounded-lg bg-bg-secondary/50">
+                <p className="text-[13px] text-text-muted">No open positions found.</p>
+              </div>
+            )}
+
+            {activeChart && data.fxRates.length > 0 && (
+              <div className="mt-6 pt-6 border-t border-border opacity-60">
+                <FxRatesPanel rates={data.fxRates} />
+              </div>
+            )}
+            
+            {!activeChart && data.fxRates.length > 0 && (
+              <div className="hidden lg:block">
+                <FxRatesPanel rates={data.fxRates} />
+              </div>
+            )}
+          </div>
+
+          {/* Large Viewer Area */}
+          <div className="flex-1 min-w-0">
+            {activeChart ? (
+            <div className="bg-bg-secondary border border-border rounded-xl shadow-lg overflow-hidden flex flex-col h-[650px]">
+                <EmbeddedChart accountId={activeChart.accountId} symbol={activeChart.symbol} height={650} onClose={() => setActiveChart(null)} />
+              </div>
+            ) : (
+              <div className="h-[400px] border border-border border-dashed rounded-xl flex flex-col items-center justify-center text-text-muted bg-bg-secondary/30">
+                <svg className="w-16 h-16 opacity-10 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                </svg>
+                <p className="text-[15px]">Select a position on the left to analyze</p>
+                <p className="text-[12px] opacity-60 mt-1">Professional candlestick visualization</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ==================== Embedded Chart Component ====================
+
+const TIMEFRAMES = [
+  { label: '1m', value: '1m' },
+  { label: '5m', value: '5m' },
+  { label: '15m', value: '15m' },
+  { label: '1h', value: '1h' },
+  { label: '1d', value: '1d' },
+  { label: '1w', value: '1w' },
+  { label: '1M', value: '1M' },
+]
+
+function EmbeddedChart({ accountId, symbol, height, onClose }: { accountId: string; symbol: string; height: number; onClose: () => void }) {
+  const [data, setData] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [timeframe, setTimeframe] = useState('1h')
+  const [maPeriods, setMaPeriods] = useState([5, 20, 60])
+
+  useEffect(() => {
+    async function fetchBars() {
+      setLoading(true); setError(null)
+      try {
+        const bars = await api.trading.historyBars(accountId, symbol, { timeframe, limit: 200 })
+        setData(bars)
+      } catch (err) {
+        setError(String(err))
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchBars()
+  }, [accountId, symbol, timeframe])
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header with Timeframes and MA Config */}
+      <div className="px-6 py-4 border-b border-border bg-bg-tertiary/30 flex justify-between items-center shrink-0">
+        <div className="flex items-center gap-8">
+          <div className="flex items-center gap-2">
+            <span className="text-[18px] font-bold text-text">{symbol}</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg-tertiary text-text-muted border border-border">
+              {accountId}
+            </span>
+          </div>
+          
+          {/* TF Selector */}
+          <div className="flex items-center bg-bg-tertiary rounded-lg p-0.5 border border-border">
+            {TIMEFRAMES.map(tf => (
+              <button
+                key={tf.value}
+                onClick={() => setTimeframe(tf.value)}
+                className={`px-3 py-1 text-[11px] font-medium rounded-md transition-all ${
+                  timeframe === tf.value 
+                    ? 'bg-accent text-white shadow-sm' 
+                    : 'text-text-muted hover:text-text hover:bg-bg-secondary'
+                }`}
+              >
+                {tf.label}
+              </button>
+            ))}
+          </div>
+
+          {/* MA Config */}
+          <div className="flex items-center gap-2 bg-bg-tertiary rounded-lg px-3 py-1 border border-border">
+            <span className="text-[10px] text-text-muted uppercase font-bold mr-1">MA</span>
+            {maPeriods.map((p, i) => (
+              <input
+                key={i}
+                type="number"
+                value={p}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value) || 0
+                  const next = [...maPeriods]
+                  next[i] = val
+                  setMaPeriods(next)
+                }}
+                className="w-8 bg-transparent text-[11px] font-mono text-center focus:outline-none border-b border-transparent focus:border-accent"
+              />
+            ))}
+          </div>
+        </div>
+
+        <button onClick={onClose} className="text-text-muted hover:text-text p-1">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Chart Content */}
+      <div className="flex-1 p-4 bg-[#0B0E14] min-h-0">
+        {loading ? (
+          <div className="h-full flex items-center justify-center text-text-muted bg-bg-secondary/10 rounded-lg">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+              <span className="text-[12px]">Fetching {timeframe} data...</span>
+            </div>
+          </div>
+        ) : error ? (
+          <div className="h-full flex items-center justify-center text-red bg-bg-secondary/10 rounded-lg p-10 text-center">
+            {error}
+          </div>
+        ) : (
+          <KLineChart data={data} height={height - 110} symbol={symbol} periods={maPeriods} />
+        )}
       </div>
     </div>
   )
@@ -376,7 +533,12 @@ function contractDisplay(p: Position): { name: string; tag?: string } {
   return { name: sym }
 }
 
-function PositionsTable({ positions, fxRates }: { positions: PositionWithAccount[]; fxRates: FxRateInfo[] }) {
+function PositionsTable({ positions, fxRates, onViewChart, compact = false }: { 
+  positions: PositionWithAccount[]; 
+  fxRates: FxRateInfo[];
+  onViewChart: (accountId: string, symbol: string) => void
+  compact?: boolean
+}) {
   const rateMap = Object.fromEntries(fxRates.map(r => [r.currency, r.rate]))
   const hasNonUsd = positions.some(p => p.currency && p.currency !== 'USD')
 
@@ -390,14 +552,14 @@ function PositionsTable({ positions, fxRates }: { positions: PositionWithAccount
           <thead>
             <tr className="bg-bg-secondary text-text-muted text-left">
               <th className="px-3 py-2 font-medium">Symbol</th>
-              <th className="px-3 py-2 font-medium text-center">Ccy</th>
-              <th className="px-3 py-2 font-medium text-right">Qty</th>
-              <th className="px-3 py-2 font-medium text-right">Avg Cost</th>
-              <th className="px-3 py-2 font-medium text-right">Current</th>
-              <th className="px-3 py-2 font-medium text-right">Mkt Value</th>
-              {hasNonUsd && <th className="px-3 py-2 font-medium text-right">USD Value</th>}
+              {!compact && <th className="px-3 py-2 font-medium text-center">Ccy</th>}
+              <th className="px-3 py-2 font-medium text-right">{compact ? 'Qty' : 'Quantity'}</th>
+              {!compact && <th className="px-3 py-2 font-medium text-right">Avg Cost</th>}
+              <th className="px-3 py-2 font-medium text-right">Price</th>
+              {!compact && <th className="px-3 py-2 font-medium text-right">Mkt Value</th>}
+              {!compact && hasNonUsd && <th className="px-3 py-2 font-medium text-right">USD Value</th>}
               <th className="px-3 py-2 font-medium text-right">PnL</th>
-              <th className="px-3 py-2 font-medium text-right">PnL %</th>
+              {!compact && <th className="px-3 py-2 font-medium text-right">PnL %</th>}
             </tr>
           </thead>
           <tbody>
@@ -409,27 +571,31 @@ function PositionsTable({ positions, fxRates }: { positions: PositionWithAccount
               const usdValue = p.marketValue * fxRate
 
               return (
-                <tr key={i} className="border-t border-border hover:bg-bg-tertiary/30 transition-colors">
+                <tr key={i} className="border-t border-border hover:bg-bg-tertiary/30 transition-colors group">
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-medium text-text">{display.name}</span>
-                      {display.tag && (
-                        <span className="text-[10px] px-1 py-0.5 rounded bg-bg-tertiary text-text-muted">{display.tag}</span>
-                      )}
-                      {deriv && (
-                        <span className={`text-[10px] px-1 py-0.5 rounded font-medium ${p.side === 'long' ? 'bg-green/15 text-green' : 'bg-red/15 text-red'}`}>
-                          {p.side}
-                        </span>
-                      )}
-                      <span className="text-[10px] text-text-muted/50">{p.accountLabel}</span>
+                      <button 
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onViewChart(p.contract.aliceId?.split('|')[0] || '', p.contract.symbol || '');
+                        }}
+                        className="px-1.5 py-0.5 text-[10px] bg-bg-tertiary border border-border rounded text-text-muted hover:text-accent hover:border-accent transition-all"
+                      >
+                        Chart
+                      </button>
                     </div>
+                    {!compact && display.tag && (
+                      <span className="text-[10px] px-1 py-0.5 rounded bg-bg-tertiary text-text-muted">{display.tag}</span>
+                    )}
                   </td>
-                  <td className="px-3 py-2 text-center text-text-muted text-[11px]">{ccy}</td>
-                  <td className="px-3 py-2 text-right text-text">{fmtNum(Number(p.quantity))}</td>
-                  <td className="px-3 py-2 text-right text-text-muted">{fmt(p.avgCost, p.currency)}</td>
-                  <td className="px-3 py-2 text-right text-text">{fmt(p.marketPrice, p.currency)}</td>
-                  <td className="px-3 py-2 text-right text-text">{fmt(p.marketValue, p.currency)}</td>
-                  {hasNonUsd && (
+                  {!compact && <td className="px-3 py-2 text-center text-text-muted text-[11px]">{ccy}</td>}
+                  <td className="px-3 py-2 text-right text-text font-medium">{fmtNum(Number(p.quantity))}</td>
+                  {!compact && <td className="px-3 py-2 text-right text-text-muted">{fmt(p.avgCost, p.currency)}</td>}
+                  <td className="px-3 py-2 text-right text-text font-medium">{fmt(p.marketPrice, p.currency)}</td>
+                  {!compact && <td className="px-3 py-2 text-right text-text">{fmt(p.marketValue, p.currency)}</td>}
+                  {!compact && hasNonUsd && (
                     <td className="px-3 py-2 text-right text-text-muted">
                       {ccy === 'USD' ? '—' : fmt(usdValue)}
                     </td>
@@ -437,13 +603,15 @@ function PositionsTable({ positions, fxRates }: { positions: PositionWithAccount
                   <td className={`px-3 py-2 text-right font-medium ${p.unrealizedPnL >= 0 ? 'text-green' : 'text-red'}`}>
                     {fmtPnl(p.unrealizedPnL, p.currency)}
                   </td>
-                  <td className={`px-3 py-2 text-right ${p.unrealizedPnL >= 0 ? 'text-green' : 'text-red'}`}>
-                    {(() => {
-                      const cost = p.avgCost * Number(p.quantity)
-                      const pct = cost > 0 ? (p.unrealizedPnL / cost) * 100 : 0
-                      return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`
-                    })()}
-                  </td>
+                  {!compact && (
+                    <td className={`px-3 py-2 text-right ${p.unrealizedPnL >= 0 ? 'text-green' : 'text-red'}`}>
+                      {(() => {
+                        const cost = p.avgCost * Number(p.quantity)
+                        const pct = cost > 0 ? (p.unrealizedPnL / cost) * 100 : 0
+                        return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`
+                      })()}
+                    </td>
+                  )}
                 </tr>
               )
             })}

@@ -43,6 +43,7 @@ import { createCronEngine, createCronListener, createCronTools } from './task/cr
 import { createHeartbeat } from './task/heartbeat/index.js'
 import { NewsCollectorStore, NewsCollector } from './domain/news/index.js'
 import { createNewsArchiveTools } from './tool/news.js'
+import { McpClientPlugin } from './core/mcp-client.js'
 
 // ==================== Persistence paths ====================
 
@@ -69,6 +70,14 @@ async function readWithDefault(target: string, defaultFile: string): Promise<str
 }
 
 async function main() {
+  // Load .env file natively (Node 20.12.0+, 21.7.0+, 22+)
+  try {
+    // @ts-ignore - loadEnvFile is available in Node 20.12.0+, 21.7.0+, 22+
+    if (typeof process.loadEnvFile === 'function') process.loadEnvFile()
+  } catch (e) {
+    // Ignore error if .env is missing
+  }
+
   const config = await loadConfig()
 
   // ==================== Event Log ====================
@@ -303,6 +312,9 @@ async function main() {
   if (config.connectors.mcp.port) {
     corePlugins.push(new McpPlugin(toolCenter, config.connectors.mcp.port))
   }
+
+  // Connect to external MCP servers
+  corePlugins.push(new McpClientPlugin())
 
   // Web UI is always active (no enabled flag)
   if (config.connectors.web.port) {

@@ -389,6 +389,47 @@ export class AlpacaBroker implements IBroker {
     }
   }
 
+  async getHistoryBars(params: GetHistoryBarsParams): Promise<HistoryBar[]> {
+    const { symbol, timeframe, start, end, limit } = params
+    try {
+      const alpacaTimeframe = {
+        '1m': '1Min',
+        '5m': '5Min',
+        '15m': '15Min',
+        '1h': '1Hour',
+        '1d': '1Day',
+        '1w': '1Week',
+        '1M': '1Month'
+      }[timeframe] || '1Hour'
+
+      const resp = this.client.getBarsV2(
+        symbol,
+        {
+          start: start?.toISOString(),
+          end: end?.toISOString(),
+          timeframe: alpacaTimeframe,
+          limit: limit ?? 1000,
+          adjustment: 'all',
+        }
+      )
+
+      const bars: HistoryBar[] = []
+      for await (const bar of resp) {
+        bars.push({
+          timestamp: new Date(bar.Timestamp),
+          open: bar.OpenPrice,
+          high: bar.HighPrice,
+          low: bar.LowPrice,
+          close: bar.ClosePrice,
+          volume: bar.Volume,
+        })
+      }
+      return bars
+    } catch (err) {
+      throw BrokerError.from(err)
+    }
+  }
+
   // ---- Capabilities ----
 
   getCapabilities(): AccountCapabilities {

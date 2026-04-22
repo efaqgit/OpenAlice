@@ -11,6 +11,7 @@ import type { AccountConfig } from '../../../core/config.js'
 import { CcxtBroker } from './ccxt/CcxtBroker.js'
 import { AlpacaBroker } from './alpaca/AlpacaBroker.js'
 import { IbkrBroker } from './ibkr/IbkrBroker.js'
+import { MockBroker } from './mock/MockBroker.js'
 
 // ==================== Subtitle field descriptor ====================
 
@@ -112,5 +113,18 @@ Before connecting:
 4. Add 127.0.0.1 to "Trusted IPs" if running locally
 
 Paper trading requires a separate paper account login in TWS.`,
+  },
+  mock: {
+    configSchema: MockBroker.configSchema,
+    configFields: MockBroker.configFields,
+    fromConfig: MockBroker.fromConfig,
+    name: 'Mock (Paper Trading)',
+    description: 'Internal in-memory mock broker for testing and simulation. No API key required.',
+    badge: 'MK',
+    badgeColor: 'text-gray-400',
+    subtitleFields: [
+      { field: 'cash', prefix: '$' },
+    ],
+    guardCategory: 'securities', // Can be used for both, but we'll default to securities for now
   },
 }

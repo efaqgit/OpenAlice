@@ -159,4 +159,13 @@ export const tradingApi = {
     })
     return res.json()
   },
+
+  // ==================== Market Data ====================
+
+  async historyBars(accountId: string, symbol: string, opts?: { timeframe?: string; limit?: number }): Promise<Array<{ timestamp: string; open: number; high: number; low: number; close: number; volume: number }>> {
+    const params = new URLSearchParams()
+    if (opts?.timeframe) params.set('timeframe', opts.timeframe)
+    if (opts?.limit) params.set('limit', String(opts.limit))
+    return fetchJson(`/api/trading/accounts/${accountId}/history/${encodeURIComponent(symbol)}?${params}`)
+  },
 }

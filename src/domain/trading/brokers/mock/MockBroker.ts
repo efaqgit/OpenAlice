@@ -53,6 +53,7 @@ export interface MockBrokerOptions {
   id?: string
   label?: string
   cash?: number
+  positions?: Array<{ symbol: string; quantity: number; avgCost: number; side?: 'long' | 'short'; secType?: string }>
   accountInfo?: Partial<AccountInfo>
 }
 
@@ -76,8 +77,9 @@ export const DEFAULT_CAPABILITIES: AccountCapabilities = {
 
 export function makeContract(overrides: Partial<Contract> & { aliceId?: string } = {}): Contract {
   const c = new Contract()
-  c.aliceId = overrides.aliceId ?? 'mock-paper|AAPL'
-  c.symbol = overrides.symbol ?? 'AAPL'
+  const symbol = overrides.symbol ?? 'AAPL'
+  c.symbol = symbol
+  c.aliceId = overrides.aliceId ?? `mock-paper|${symbol}`
   c.secType = overrides.secType ?? 'STK'
   c.exchange = overrides.exchange ?? 'MOCK'
   c.currency = overrides.currency ?? 'USD'
@@ -132,7 +134,12 @@ export class MockBroker implements IBroker {
   static configFields: import('../types.js').BrokerConfigField[] = []
 
   static fromConfig(config: { id: string; label?: string; brokerConfig: Record<string, unknown> }): MockBroker {
-    return new MockBroker({ id: config.id, label: config.label })
+    return new MockBroker({
+      id: config.id,
+      label: config.label,
+      cash: typeof config.brokerConfig.cash === 'number' ? config.brokerConfig.cash : undefined,
+      positions: Array.isArray(config.brokerConfig.positions) ? config.brokerConfig.positions : undefined,
+    })
   }
 
   // ---- Instance ----
@@ -154,6 +161,14 @@ export class MockBroker implements IBroker {
     this.id = options.id ?? 'mock-paper'
     this.label = options.label ?? 'Mock Paper Account'
     this._cash = new Decimal(options.cash ?? 100_000)
+
+    if (options.positions) {
+      for (const p of options.positions) {
+        const contract = makeContract({ symbol: p.symbol, secType: p.secType ?? 'STK' })
+        this._applyFill(contract, p.side?.toUpperCase() ?? 'BUY', new Decimal(p.quantity), new Decimal(p.avgCost))
+      }
+    }
+
     if (options.accountInfo) {
       this._accountOverride = {
         baseCurrency: 'USD', netLiquidation: 0, totalCashValue: 0, unrealizedPnL: 0, realizedPnL: 0,
@@ -400,6 +415,30 @@ export class MockBroker implements IBroker {
       volume: 1_000_000,
       timestamp: new Date(),
     }
+  }
+
+  async getHistoryBars(params: GetHistoryBarsParams): Promise<HistoryBar[]> {
+    const { limit = 100 } = params
+    const bars: HistoryBar[] = []
+    let price = this._quotes.get(params.symbol) ?? 100
+    const now = Date.now()
+    const step = 60 * 1000 // 1m
+
+    for (let i = 0; i < limit; i++) {
+      const ts = now - (limit - i) * step
+      const change = (Math.random() - 0.5) * 2
+      const open = price
+      const close = price + change
+      const high = Math.max(open, close) + Math.random()
+      const low = Math.min(open, close) - Math.random()
+      bars.push({
+        timestamp: new Date(ts),
+        open, high, low, close,
+        volume: Math.floor(Math.random() * 1000),
+      })
+      price = close
+    }
+    return bars
   }
 
   async getMarketClock(): Promise<MarketClock> {

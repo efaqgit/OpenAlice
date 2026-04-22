@@ -665,6 +665,32 @@ export class CcxtBroker implements IBroker<CcxtBrokerMeta> {
     }
   }
 
+  async getHistoryBars(params: GetHistoryBarsParams): Promise<HistoryBar[]> {
+    this.ensureInit()
+    const { symbol, timeframe, start, limit } = params
+
+    try {
+      // CCXT usually takes the native symbol (e.g. BTC/USDT)
+      const ohlcv = await this.exchange.fetchOHLCV(
+        symbol,
+        timeframe,
+        start?.getTime(),
+        limit
+      )
+
+      return ohlcv.map(([ts, o, h, l, c, v]) => ({
+        timestamp: new Date(ts as number),
+        open: o ?? 0,
+        high: h ?? 0,
+        low: l ?? 0,
+        close: c ?? 0,
+        volume: v ?? 0,
+      }))
+    } catch (err) {
+      throw BrokerError.from(err)
+    }
+  }
+
   // ---- Capabilities ----
 
   getCapabilities(): AccountCapabilities {

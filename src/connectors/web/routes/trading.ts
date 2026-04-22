@@ -137,6 +137,16 @@ export function createTradingRoutes(ctx: EngineContext) {
     })
   })
 
+  // History bars
+  app.get('/accounts/:id/history/:symbol', async (c) => {
+    const account = resolveAccount(ctx, c)
+    if (!account) return c.json({ error: 'Account not found' }, 404)
+    const symbol = c.req.param('symbol')
+    const timeframe = (c.req.query('timeframe') as any) || '1h'
+    const limit = Number(c.req.query('limit')) || 100
+    return queryAccount(c, account, () => account.getHistoryBars({ symbol, timeframe, limit }))
+  })
+
   // ==================== Per-account wallet/git routes ====================
 
   app.get('/accounts/:id/wallet/log', (c) => {

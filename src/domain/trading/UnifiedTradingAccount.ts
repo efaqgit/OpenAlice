@@ -524,6 +524,10 @@ export class UnifiedTradingAccount {
     return this._callBroker(() => this.broker.getMarketClock())
   }
 
+  getHistoryBars(params: import('./brokers/types.js').GetHistoryBarsParams): Promise<import('./brokers/types.js').HistoryBar[]> {
+    return this._callBroker(() => this.broker.getHistoryBars(params))
+  }
+
   async searchContracts(pattern: string): Promise<ContractDescription[]> {
     const results = await this._callBroker(() => this.broker.searchContracts(pattern))
     for (const desc of results) this.stampAliceId(desc.contract)

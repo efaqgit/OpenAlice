@@ -130,6 +130,23 @@ export interface Quote {
   timestamp: Date
 }
 
+export interface HistoryBar {
+  timestamp: Date
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
+export interface GetHistoryBarsParams {
+  symbol: string
+  timeframe: '1m' | '5m' | '15m' | '1h' | '1d'
+  start?: Date
+  end?: Date
+  limit?: number
+}
+
 export interface MarketClock {
   isOpen: boolean
   nextOpen?: Date
@@ -217,6 +234,7 @@ export interface IBroker<TMeta = unknown> {
   getOrders(orderIds: string[]): Promise<OpenOrder[]>
   getOrder(orderId: string): Promise<OpenOrder | null>
   getQuote(contract: Contract): Promise<Quote>
+  getHistoryBars(params: GetHistoryBarsParams): Promise<HistoryBar[]>
   getMarketClock(): Promise<MarketClock>
 
   // ---- Capabilities ----
